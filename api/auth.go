@@ -9,6 +9,11 @@ import (
 	"fmt"
 )
 
+// Unused type for lint checking
+type testLintUnused struct{
+	err error
+}
+
 // Auth is used to perform credential backend related operations.
 type Auth struct {
 	c *Client
