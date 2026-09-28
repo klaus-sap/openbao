@@ -384,7 +384,7 @@ func mfaPaths(i *IdentityStore) []*framework.Path {
 				},
 				"algorithm": {
 					Type:        framework.TypeString,
-					Default:     "SHA1",
+					Default:     "SHA256",
 					Description: `The hashing algorithm used to generate the TOTP token. Options include SHA1, SHA256 and SHA512.`,
 				},
 				"digits": {
