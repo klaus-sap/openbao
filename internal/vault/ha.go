@@ -199,8 +199,9 @@ func (c *Core) LeaderLocked() (isLeader bool, leaderAddr, clusterAddr string, er
 	}
 
 	key := coreLeaderPrefix + leaderUUID
-	// Use background because postUnseal isn't run on standby
-	entry, err := c.barrier.Get(context.Background(), key)
+	// Use background because postUnseal isn't run on standby and bypass cache
+	contextBackground := physical.CacheRefreshContext(context.Background(), true)
+	entry, err := c.barrier.Get(contextBackground, key)
 	if err != nil {
 		return false, "", "", err
 	}
