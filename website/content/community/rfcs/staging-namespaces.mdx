@@ -60,7 +60,7 @@ information like "locked", "failed", "completed" or "retired".
 For reading the namespace record, the parent namespace must be unsealed, which is
 considered as prerequisite for namespace replacement operations.
 
-From the namespace record, we can provide a mapping function `getLogicalUUID(physicalUUID)`.
+By truncating the physical UUID, we can provide a mapping function `getLogicalUUID(physicalUUID)`.
 For convenience, we may also create a reverse mapping function `getPhysicalUUID(logicalUUID)`,
 which looks up the namespace record and returns the physical UUID. 
 If the physical UUID in the namespace record is empty, then return the logical UUID
