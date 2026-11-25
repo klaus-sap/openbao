@@ -71,11 +71,12 @@ invisible namespaces) and a newly generated physical UUID. When switching an exi
 namespace "old" to a staging namespace "stage", we should replace the old (effective) 
 physical UUID p_old with the new physical UUID p_stage of the staging namespace while 
 keeping the logical UUID, accessor ID and  path of the old namespace. After switching 
-the physical UUID was successful, we should wipe the stale storage with physical UUID p_old.
+the physical UUID was successful, we may wipe the stale storage with physical UUID p_old.
 
 Switching from an old to a staging namespace shall be an atomic operation.
 Before creating the staging namespace for a regular namespace, first check that 
-the status is empty. Then set status to "locked" and generate a new physical UUID "p_stage". 
+the status is empty. Then set status to "locked" and generate a new physical UUID "p_stage"
+(by increasing the version number of p_old). 
 Then add p_stage as staging UUID to the existing namespace. Thus, we can guarantee that at
 any time only one staging operation is possible. After writing to the staging namespace 
 has been completed, check the staging namespace, then set the status to "completed"
@@ -84,9 +85,9 @@ Then check the namespace with new physical UUID. If the check is successful, set
 status of the staging namespace to "retired", as it now contains the old storage of the 
 namespace. Then wipe the stale storage of the namespace with old physical UUID and clear 
 the staging UUID (which contains the old physical UUID) and the staging status in the 
-namespace record. If any error when writing the staging namespace, then set the status to 
-"failed" and keep the old physical UUID in the namespace record and try to resume or 
-cleanup the staging namespace. 
+namespace record. If any error occurs when writing the staging namespace, then set the 
+status to "failed" and keep the old physical UUID in the namespace record and try to 
+resume or cleanup the staging namespace. 
 
 ### Logical UUID
 
@@ -124,9 +125,8 @@ The function
 [splitNamespaceFromKey](https://github.com/openbao/openbao/blob/main/internal/vault/invalidation.go#L677) 
 must treat the UUID from the key as physical UUID and return the corresponding logical UUID.
 
-Physical backend keys of child namespaces look like follows, as the
-child namespace definition is stored inside the parent namespace under
-its logical UUID.
+Storage keys of child namespaces look like follows, as the child namespace definition
+is stored inside the parent namespace under its logical UUID.
 
 `namespaces/<parent-physical-UUID>/core/namespaces/<child-logical-UUID>`
 
@@ -165,8 +165,8 @@ additional CPU time.
 Adding a physical UUID is an (downwards) incompatible change,
 i.e. after  generating namespaces with distinct physical UUID 
 one cannot downgrade the cluster to an old version. On the other 
-hand, we do not officially support downgrades of OpenBao, so 
-this restriction should be irrelevant.
+hand, we do not officially support downgrades of OpenBao. 
+We may mention this "restriction" in the documentation.
 
 ## Security Implications
 
@@ -180,16 +180,16 @@ Instead, we must decrypt the data and encrypt again with new AAD
 ## Unresolved Questions
 
 Should we exclude the root namespace from using staging namespaces?
-The root namespace has no storage prefix, but it seems that we
+The root namespace has no storage prefix, and it seems that we
 don't need replacement operations for the root namespace.
 
 Should we recursively create staging namespaces for child namespaces?
 We propose to restrict replacement operations to one namespace. 
 The caller shall decide whether to loop over a subtree of namespaces.
-However, for normal child namespaces, we must re-encrypt them if
-the barrier of the parent namespace has changed.
+However, we must re-encrypt normal child namespaces if the barrier
+of the parent namespace has changed.
 
-Is it feasible effort to introduce a read-only flag on namespaces?
+How much effort to introduce a read-only flag on namespaces?
 
 ## Related Issues
 
