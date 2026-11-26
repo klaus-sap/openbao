@@ -38,11 +38,11 @@ the existing namespace in a consistent state.
 
 Staging namespaces shall be invisible to end users. They provide a mechanism for
 internal storage generation to enable atomic switches from old namespace storage
-to new namespace storage by using a staging storage.
+to new namespace storage.
 
 However, when writing to a staging namespace, we should block all write operations 
 to the existing namespace. Thus, we should introduce a new **read-only flag** on
-namespaces. In addition, we should pause jobs working on the namespace.
+namespaces. In addition, we should pause jobs writing to namespaces.
 
 ## Technical Description
 
@@ -60,11 +60,11 @@ information like "locked", "failed", "completed" or "retired".
 For reading the namespace record, the parent namespace must be unsealed, which is
 considered as prerequisite for namespace replacement operations.
 
-By truncating the physical UUID, we can provide a mapping function `getLogicalUUID(physicalUUID)`.
+By splitting the physical UUID, we can provide a mapping function `getLogicalUUID(physicalUUID)`.
 For convenience, we may also create a reverse mapping function `getPhysicalUUID(logicalUUID)`,
 which looks up the namespace record and returns the physical UUID. 
 If the physical UUID in the namespace record is empty, then return the logical UUID
-as fallback, i.e. "effective" physical UUID.
+as fallback, as "effective" physical UUID.
 
 We may create staging namespaces with empty logical UUID (as staging namespaces are 
 invisible namespaces) and a newly generated physical UUID. When switching an existing 
@@ -76,7 +76,7 @@ the physical UUID was successful, we may wipe the stale storage with physical UU
 Switching from an old to a staging namespace shall be an atomic operation.
 Before creating the staging namespace for a regular namespace, first check that 
 the status is empty. Then set status to "locked" and generate a new physical UUID "p_stage"
-(by increasing the version number of p_old). 
+(by increasing the version number of p_old). Flag the old namespace as read-only.
 Then add p_stage as staging UUID to the existing namespace. Thus, we can guarantee that at
 any time only one staging operation is possible. After writing to the staging namespace 
 has been completed, check the staging namespace, then set the status to "completed"
@@ -87,7 +87,8 @@ namespace. Then wipe the stale storage of the namespace with old physical UUID a
 the staging UUID (which contains the old physical UUID) and the staging status in the 
 namespace record. If any error occurs when writing the staging namespace, then set the 
 status to "failed" and keep the old physical UUID in the namespace record and try to 
-resume or cleanup the staging namespace. 
+resume or cleanup the staging namespace. If you abort the operation, clear the read-only
+flag.
 
 ### Logical UUID
 
