@@ -53,7 +53,7 @@ a "physical" UUID and a "staging" UUID to namespace records. If the physical UUI
 is empty for legacy namespaces, then use the logical UUID as fallback ("effective"
 physical UUID). If the physical UUID is not empty, then the physical UUID **must** 
 start with the logical UUID and end with a version number, for example:
-`12345678-abcd-abcd-123456789012-v1`.
+`12345678-abcd-abcd-abef-123456789012-v1`.
 Thus, from the namespace record, we get a mapping logical UUID -> 
 physical UUID.  In addition, we should add a field "stagingStatus" which 
 contains status information like "locked", "failed", "completed" or "retired".
@@ -82,10 +82,10 @@ and swap physical UUID and staging UUID in the record of the old namespace.
 Then check the namespace with new physical UUID. If the check is successful, then set the 
 status of the staging namespace to "retired", as it now contains the old storage of the 
 namespace. Then we should wipe the stale storage of the namespace with old physical UUID,
-clear the staging UUID (which contains the old physical UUID) and the staging status in the
-namespace record. If any error occurs when writing the staging namespace, then set the 
-status to "failed" and keep the old physical UUID in the namespace record and try to resume 
-or cleanup the staging namespace. Finally, clear the read-only flag of the old namespace.
+clear the staging UUID (which contains the old physical UUID), clear the staging status in 
+the namespace record and finally clear the read-only flag of the old namespace. If any error 
+occurs when writing the staging namespace, then set the status to "failed" and keep the old 
+physical UUID in the namespace record and try to resume or cleanup the staging namespace.
 
 ### Logical UUID
 
@@ -102,9 +102,10 @@ the logicalUUID of the namespace from the function `getLogicalUUID(physicalUUID)
 After switching a namespace from old to new storage, we must update dependent
 structures like barriers or router storage views.
 
-The function Namespace.Clone should copy physical UUID, staging UUID and the status.
-All other lifecycle functions like Create, Delete, Load or Invalidate should be
-adapted to use physical UUIDs.
+The function Namespace.Clone should copy physical UUID, staging UUID, status
+and the read-only flag. All other lifecycle functions like Create, Delete, Load
+or Invalidate should be adapted to use physical UUIDs when accessing storage,
+while logical access continue to use logical UUIDs.
 
 The function 
 [NamespaceStoragePathPrefix](https://github.com/openbao/openbao/blob/main/internal/vault/namespace_store.go#L139) 
@@ -184,8 +185,6 @@ don't need replacement operations for the root namespace.
 Should we recursively create staging namespaces for child namespaces?
 We propose to restrict replacement operations to one namespace. 
 The caller shall decide whether to loop over a subtree of namespaces.
-However, we must re-encrypt normal child namespaces if the barrier
-of the parent namespace has changed because of a new physical UUID.
 
 ## Related Issues
 
