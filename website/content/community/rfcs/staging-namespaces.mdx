@@ -31,7 +31,7 @@ namespace view during replacement operations.
 
 Instead of overwriting existing namespaces, we should write to staging namespaces
 and then switch from old to new namespace location. In case of an unrecoverable error
-before switching the storage, we may simply delete the new namespace location and keep 
+before switching the storage, we may simply delete the staging namespace and keep 
 the existing namespace in a consistent state.
 
 ## User-facing description
@@ -55,50 +55,46 @@ physical UUID). If the physical UUID is not empty, then the physical UUID **must
 start with the logical UUID and end with a version number, for example:
 `12345678-abcd-abcd-123456789012-v1`.
 Thus, from the namespace record, we get a mapping logical UUID -> 
-physical UUID.  In addition, add a field "stagingStatus" which contains status 
-information like "locked", "failed", "completed" or "retired".
+physical UUID.  In addition, we should add a field "stagingStatus" which 
+contains status information like "locked", "failed", "completed" or "retired".
 For reading the namespace record, the parent namespace must be unsealed, which is
 considered as prerequisite for namespace replacement operations.
 
 By splitting the physical UUID, we can provide a mapping function `getLogicalUUID(physicalUUID)`.
 For convenience, we may also create a reverse mapping function `getPhysicalUUID(logicalUUID)`,
-which looks up the namespace record and returns the physical UUID. 
-If the physical UUID in the namespace record is empty, then return the logical UUID
-as fallback, as "effective" physical UUID.
+which looks up the namespace record and returns the physical UUID. If the physical UUID in the 
+namespace record is empty, then return the logical UUID as fallback, as "effective" physical UUID.
 
-We may create staging namespaces with empty logical UUID (as staging namespaces are 
-invisible namespaces) and a newly generated physical UUID. When switching an existing 
-namespace "old" to a staging namespace "stage", we should replace the old (effective) 
-physical UUID p_old with the new physical UUID p_stage of the staging namespace while 
-keeping the logical UUID, accessor ID and  path of the old namespace. After switching 
-the physical UUID was successful, we may wipe the stale storage with physical UUID p_old.
+We may create staging namespaces with empty logical UUID (as staging namespaces are invisible 
+namespaces) and new physical UUID. When switching an existing namespace "old" to a staging namespace 
+"stage", we should replace the old physical UUID p_old with the new physical UUID p_stage of the 
+staging namespace while keeping the logical UUID, accessor ID and  path of the old namespace. 
+After switching the physical UUID was successful, we may wipe the stale storage with physical UUID p_old.
 
 Switching from an old to a staging namespace shall be an atomic operation.
 Before creating the staging namespace for a regular namespace, first check that 
-the status is empty. Then set status to "locked" and generate a new physical UUID "p_stage"
-(by increasing the version number of p_old). Flag the old namespace as read-only.
+the status is empty. Then set the status to "locked" and generate a new physical UUID 
+"p_stage" (by increasing the version number of p_old). Flag the old namespace as read-only.
 Then add p_stage as staging UUID to the existing namespace. Thus, we can guarantee that at
 any time only one staging operation is possible. After writing to the staging namespace 
 has been completed, check the staging namespace, then set the status to "completed"
-and swap (effective) physical UUID and staging UUID in the namespace record. 
-Then check the namespace with new physical UUID. If the check is successful, set the 
+and swap physical UUID and staging UUID in the record of the old namespace. 
+Then check the namespace with new physical UUID. If the check is successful, then set the 
 status of the staging namespace to "retired", as it now contains the old storage of the 
-namespace. Then wipe the stale storage of the namespace with old physical UUID and clear 
-the staging UUID (which contains the old physical UUID) and the staging status in the 
+namespace. Then we should wipe the stale storage of the namespace with old physical UUID,
+clear the staging UUID (which contains the old physical UUID) and the staging status in the
 namespace record. If any error occurs when writing the staging namespace, then set the 
-status to "failed" and keep the old physical UUID in the namespace record and try to 
-resume or cleanup the staging namespace. If you abort the operation, clear the read-only
-flag.
+status to "failed" and keep the old physical UUID in the namespace record and try to resume 
+or cleanup the staging namespace. Finally, clear the read-only flag of the old namespace.
 
 ### Logical UUID
 
-The logical UUID remains the primary identifier of namespaces. If we pass 
-the logical UUID to API functions, then we should lookup the physicalUUID
-to get the storage location.
+The logical UUID remains the primary identifier of namespaces. If we pass the logical UUID 
+to API functions, then we should get the physicalUUID to determine the storage location.
 
 The function 
 [NamespaceByStoragePath](https://github.com/openbao/openbao/blob/main/internal/vault/namespace_store.go#L1746) 
-must be changed. The UUID from the path is the physical UUID. In this case we may get 
+must be changed. The UUID from the path is the physical UUID. In this case, we may get 
 the logicalUUID of the namespace from the function `getLogicalUUID(physicalUUID)`.
 
 ### Further Changes
@@ -116,7 +112,7 @@ must use the physical UUID to construct the path prefix.
 
 The function 
 [NewAESGCMBarrier](https://github.com/openbao/openbao/blob/main/internal/vault/barrier/aes_gcm.go#L142) 
-must use the physical UUID to construct the 
+should use the physical UUID to construct the 
 [metaPrefix](https://github.com/openbao/openbao/blob/main/internal/vault/barrier/aes_gcm.go#L155). 
 The physical UUID is used to construct the 
 [AAD](https://github.com/openbao/openbao/blob/main/internal/vault/barrier/aes_gcm.go#L1040) 
@@ -133,7 +129,8 @@ is stored inside the parent namespace under its logical UUID.
 
 The function 
 [wipeStorageTree](https://github.com/openbao/openbao/blob/main/internal/vault/namespace_store.go#L1519) 
-should use the logical UUID to search matching physical UUIDs (the logical UUID must be prefix).
+should use the logical UUID to search all matching physical UUIDs, i.e. all physical UUIDs with the logical
+UUID as prefix.
 
 ## Future work
 
@@ -164,7 +161,7 @@ its child namespaces. Decryption and re-encryption require
 additional CPU time.
 
 Adding a physical UUID is an (downwards) incompatible change,
-i.e. after  generating namespaces with distinct physical UUID 
+i.e. after generating namespaces with distinct physical UUID 
 one cannot downgrade the cluster to an old version. On the other 
 hand, we do not officially support downgrades of OpenBao. 
 We may mention this "restriction" in the documentation.
@@ -173,7 +170,7 @@ We may mention this "restriction" in the documentation.
 
 Because the AES-GCM implementation provides
 Authenticated Encryption with Associated Data (AEAD) based on the 
-storage path, we cannot copy encrypted data from 
+storage path, we cannot simply copy encrypted data from 
 `namespaces/<old-physical-UUID>` to `namespaces/<new-physical-UUID>`.
 Instead, we must decrypt the data and encrypt again with new AAD
 (Additional Authenticated Data).
@@ -188,9 +185,7 @@ Should we recursively create staging namespaces for child namespaces?
 We propose to restrict replacement operations to one namespace. 
 The caller shall decide whether to loop over a subtree of namespaces.
 However, we must re-encrypt normal child namespaces if the barrier
-of the parent namespace has changed.
-
-How much effort to introduce a read-only flag on namespaces?
+of the parent namespace has changed because of a new physical UUID.
 
 ## Related Issues
 
